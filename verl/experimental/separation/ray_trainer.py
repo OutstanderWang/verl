@@ -516,6 +516,8 @@ class SeparateRayPPOTrainer(RayPPOTrainer):
                 rollout_corr_config=rollout_corr_config,
                 policy_loss_config=self.config.actor_rollout_ref.actor.policy_loss,
             )
+            if self.config.algorithm.get("log_train_infer_discrepancy", False):
+                metrics.update(self._log_train_infer_discrepancy(batch, timing_raw))
         else:  # Recompute old_log_probs
             with marked_timer("old_log_prob", timing_raw, color="blue"):
                 old_log_prob, old_log_prob_mfu = self._compute_old_log_prob(batch)

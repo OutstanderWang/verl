@@ -1324,6 +1324,25 @@ class RayPPOTrainer:
         old_log_prob = DataProto.from_tensordict(old_log_prob)
         return old_log_prob, old_log_prob_mfu
 
+    def _log_train_infer_discrepancy(self, batch: DataProto, timing_raw: dict) -> dict:
+        """Recompute the rollout tokens' log probs on the training engine, for metrics only.
+
+        Bypass mode sets old_log_probs = rollout_log_probs, so without this pass the gap between
+        the two engines is invisible. The result never reaches the loss.
+        """
+        from verl.utils.debug.metrics import calculate_train_infer_discrepancy, partial_rollout_mask
+
+        with marked_timer("train_infer_discrepancy", timing_raw, color="blue"):
+            # Not self._compute_old_log_prob: subclasses override it to anchor the loss on an
+            # older weight version, which is not what this measures.
+            recomputed, _ = RayPPOTrainer._compute_old_log_prob(self, batch)
+        return calculate_train_infer_discrepancy(
+            recomputed.batch["old_log_probs"],
+            batch.batch["rollout_log_probs"],
+            batch.batch["response_mask"],
+            partial_rollout_mask(batch),
+        )
+
     def _update_actor(self, batch: DataProto) -> DataProto:
         rollout_config = self.config.actor_rollout_ref.rollout
         batch.meta_info["multi_turn"] = rollout_config.multi_turn.enable
@@ -1581,6 +1600,8 @@ class RayPPOTrainer:
                             rollout_corr_config=rollout_corr_config,
                             policy_loss_config=self.config.actor_rollout_ref.actor.policy_loss,
                         )
+                        if self.config.algorithm.get("log_train_infer_discrepancy", False):
+                            metrics.update(self._log_train_infer_discrepancy(batch, timing_raw))
                     else:  # Recompute old_log_probs
                         with marked_timer("old_log_prob", timing_raw, color="blue"):
                             old_log_prob, old_log_prob_mfu = self._compute_old_log_prob(batch)

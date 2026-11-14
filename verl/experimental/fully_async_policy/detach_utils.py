@@ -156,6 +156,10 @@ def assemble_batch_from_rollout_samples(
         "fully_async/partial/total_partial_num": len(param_version_diff) - num_diff0,
         "fully_async/partial/partial_ratio": (len(param_version_diff) - num_diff0) / len(param_version_diff),
         "fully_async/partial/max_partial_span": max(param_version_diff),
+        # rollout.partial_rollout_recompute=False only: samples whose R3 routing is inconsistent
+        "fully_async/partial/kv_recomputed_num": sum(
+            bool(flag) for flag in final_batch.non_tensor_batch.get("kv_recomputed_after_sync", ())
+        ),
     }
     # add meta_info
     trajectory_param_versions = final_batch.non_tensor_batch["max_global_steps"]
